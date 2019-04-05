@@ -15,9 +15,7 @@ jobs:
       - run:
           name: Creating database and running migrations
           command: |
-            docker-compose run --rm -e RAILS_ENV=test web rake db:create
-            docker-compose run --rm -e RAILS_ENV=test web rake db:migrate
-            docker-compose run --rm -e RAILS_ENV=test web rake db:seed
+            docker-compose run --rm -e RAILS_ENV=test web rake db:setup
 
       - run:
           name: Running tests
@@ -25,65 +23,35 @@ jobs:
             docker-compose run --rm -e RAILS_ENV=test web rspec
           when: always
 
-  deploy_branch:
-    docker:
-      - image: circleci/ruby:2.4.1
-    environment:
-      DEPLOY_ENV: integration
-    steps:
-      - checkout
-      - setup_remote_docker:
-          docker_layer_caching: true
-      - run:
-          name: Installing dependencies
-          command: |
-            sudo apt-get update
-            sudo apt-get install python-dev
-            sudo apt-get install python-pip
-            sudo pip install awscli --upgrade
-      - run:
-          name: Building Docker image
-          command: |
-            $(aws ecr get-login --no-include-email)
-            docker build -t $DOCKER_REGISTRY/$CIRCLE_PROJECT_REPONAME:$CIRCLE_SHA1 .
-      - run:
-          name: Pushing Docker Image to AWS
-          command: |
-            docker info
-            docker tag $DOCKER_REGISTRY/$CIRCLE_PROJECT_REPONAME:$CIRCLE_SHA1 $DOCKER_REGISTRY/$CIRCLE_PROJECT_REPONAME:latest
-            docker push $DOCKER_REGISTRY/$CIRCLE_PROJECT_REPONAME:$CIRCLE_SHA1
-            docker push $DOCKER_REGISTRY/$CIRCLE_PROJECT_REPONAME:latest
-      - run:
-          name: Image Publication Announcements
-          command: ./.circleci/slack-notificator-publish-image.sh
-      - run:
-          name: Deploy sorting-hat
-          command: ./.circleci/chat-deploy.sh
-      - run:
-          name: Deploy Announcements
-          command: ./.circleci/slack-notificator-deploy.sh
-
   deploy_tag:
     docker:
-      - image: circleci/ruby:2.4.1
-    environment:
-      DEPLOY_ENV: sandbox
+      - image: circleci/buildpack-deps:stretch
     steps:
       - checkout
       - setup_remote_docker:
           docker_layer_caching: true
       - run:
-          name: Installing dependencies
-          command: |
-            sudo apt-get update
-            sudo apt-get install python-dev
-            sudo apt-get install python-pip
-            sudo pip install awscli --upgrade
+          name: Get Google Cloud SDK
+          command: curl https://sdk.cloud.google.com | bash
+
+      - run:
+          name: Restart Shell
+          command: exec -l $SHELL
+
+      - run:
+          name: Create Credential
+          command: echo "$GOOGLE_APPLICATION_CREDENTIALS" >> credentials.json
+
+      - run:
+          name: Init GCloud
+          command: gcloud auth activate-service-account --key-file credentials.json
+
       - run:
           name: Building Docker image
           command: |
             $(aws ecr get-login --no-include-email)
             docker build -t $DOCKER_REGISTRY/$CIRCLE_PROJECT_REPONAME:$CIRCLE_TAG .
+
       - run:
           name: Publish sorting-hat Image in AWS ECS Repository
           command: |
@@ -111,19 +79,11 @@ workflows:
               only: /.*/
             branches:
               only: /.*/
-      - deploy_branch:
-          requires:
-            - test
-          filters:
-            tags:
-              ignore: /.*/
-            branches:
-              only: integration
       - deploy_tag:
           requires:
             - test
           filters:
             tags:
-              only: /release-.*/
+              only: /gobbler-.*/
             branches:
               ignore: /.*/
