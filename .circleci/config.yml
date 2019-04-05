@@ -22,7 +22,7 @@ jobs:
       - run:
           name: Running tests
           command: |
-            docker-compose run --rm -e RAILS_ENV=test web rails test
+            docker-compose run --rm -e RAILS_ENV=test web rspec
           when: always
 
   deploy_branch:
