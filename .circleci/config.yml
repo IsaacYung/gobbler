@@ -7,11 +7,6 @@ jobs:
       - checkout
       - setup_remote_docker:
           docker_layer_caching: true
-          
-      - run:
-          name: Installing dependencies
-          command: |
-            docker-compose run --rm -e RAILS_ENV=test web rails test
 
       - run:
           name: Building Docker throught docker-compose
@@ -20,20 +15,15 @@ jobs:
       - run:
           name: Creating database and running migrations
           command: |
-            docker-compose run --rm -e RACK_ENV=test api rake db:setup
-            docker-compose run --rm -e RACK_ENV=test api rake db:migrate
-            docker-compose run --rm -e RACK_ENV=test api rake db:seed
+            docker-compose run --rm -e RAILS_ENV=test web rake db:create
+            docker-compose run --rm -e RAILS_ENV=test web rake db:migrate
+            docker-compose run --rm -e RAILS_ENV=test web rake db:seed
 
       - run:
-          name: Running and Storing tests
+          name: Running tests
           command: |
-            mkdir ~/rspec
-            docker-compose run --name api -e RACK_ENV=test api "rspec -r rspec_junit_formatter --format RspecJunitFormatter -o ./junit.xml"
-            docker cp api:/sorting-hat/junit.xml ~/rspec/junit.xml
-            docker stop $(docker ps -aq)
+            docker-compose run --rm -e RAILS_ENV=test web rails test
           when: always
-      - store_test_results:
-          path: ~/rspec
 
   deploy_branch:
     docker:
