@@ -15,9 +15,7 @@ jobs:
       - run:
           name: Creating database and running migrations
           command: |
-            docker-compose run --rm -e RAILS_ENV=test web rake db:create
-            docker-compose run --rm -e RAILS_ENV=test web rake db:migrate
-            docker-compose run --rm -e RAILS_ENV=test web rake db:seed
+            docker-compose run --rm -e RAILS_ENV=test web rake db:setup
 
       - run:
           name: Running tests
@@ -27,26 +25,15 @@ jobs:
 
   deploy_tag:
     docker:
-      - image: circleci/buildpack-deps:stretch
+      - image: google/cloud-sdk
     steps:
       - checkout
       - setup_remote_docker:
           docker_layer_caching: true
-      - run:
-          name: Get Google Cloud SDK
-          command: curl https://sdk.cloud.google.com | bash
-
-      - run:
-          name: Restart Shell
-          command: exec -l $SHELL
-
-      - run:
-          name: Create Credential
-          command: echo "$GOOGLE_APPLICATION_CREDENTIALS" >> credentials.json
-
-      - run:
-          name: Init GCloud
-          command: gcloud auth activate-service-account --key-file credentials.json
+      - run: |
+          echo $GCLOUD_SERVICE_KEY | gcloud auth activate-service-account --key-file=-
+          gcloud --quiet config set project ${GOOGLE_PROJECT_ID}
+          gcloud --quiet config set compute/zone ${GOOGLE_COMPUTE_ZONE}
 
       - run:
           name: Building Docker image
