@@ -2,24 +2,34 @@ version: 2
 jobs:
   test:
     docker:
-      - image: circleci/ruby:2.4.1
+      - image: circleci/buildpack-deps:stretch
     steps:
       - checkout
       - setup_remote_docker:
           docker_layer_caching: true
       - run:
+          name: Install Docker Compose
+          command: |
+            curl -L https://github.com/docker/compose/releases/download/1.19.0/docker-compose-`uname -s`-`uname -m` > ~/docker-compose
+            chmod +x ~/docker-compose
+            sudo mv ~/docker-compose /usr/local/bin/docker-compose
+
+      - run:
           name: Installing dependencies
           command: |
-            docker-compose run --rm -e RACK_ENV=test api bundle install
+            docker-compose run --rm -e RAILS_ENV=test web rails test
+
       - run:
           name: Building Docker throught docker-compose
           command: docker-compose build
+
       - run:
           name: Creating database and running migrations
           command: |
             docker-compose run --rm -e RACK_ENV=test api rake db:setup
             docker-compose run --rm -e RACK_ENV=test api rake db:migrate
             docker-compose run --rm -e RACK_ENV=test api rake db:seed
+
       - run:
           name: Running and Storing tests
           command: |
