@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gobblerweb
+  labels:
+    app: gobbler
+spec:
+  containers:
+    - name: gobbler-app
+      image: gcr.io/knife-ceramic-236502/gobbler:1.0.0
+      ports:
+      - containerPort: 3000

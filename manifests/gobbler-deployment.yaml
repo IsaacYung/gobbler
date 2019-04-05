@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gobblerweb
+  labels:
+    app: gobbler
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gobbler
+  template:
+    metadata:
+      labels:
+        app: gobbler
+        tier: web
+    spec:
+      containers:
+      - name: gobbler-app
+        image: gcr.io/knife-ceramic-236502/gobbler:1.0.0
+        ports:
+        - containerPort: 3000
