@@ -15,7 +15,9 @@ jobs:
       - run:
           name: Creating database and running migrations
           command: |
-            docker-compose run --rm -e RAILS_ENV=test web rake db:setup
+            docker-compose run --rm -e RAILS_ENV=test web rake db:create
+            docker-compose run --rm -e RAILS_ENV=test web rake db:migrate
+            docker-compose run --rm -e RAILS_ENV=test web rake db:seed
 
       - run:
           name: Running tests
