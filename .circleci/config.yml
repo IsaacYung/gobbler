@@ -13,7 +13,7 @@ jobs:
           command: docker-compose build
 
       - run:
-          name: Creating database and running migrations
+          name: Creating Database
           command: |
             docker-compose run --rm -e RAILS_ENV=test web rake db:setup
 
@@ -21,9 +21,8 @@ jobs:
           name: Running tests
           command: |
             docker-compose run --rm -e RAILS_ENV=test web rspec
-          when: always
 
-  deploy_tag:
+  publish_image:
     docker:
       - image: google/cloud-sdk
     steps:
@@ -51,6 +50,29 @@ jobs:
             docker push $GOOGLE_REGISTRY/$CIRCLE_PROJECT_REPONAME:$CIRCLE_TAG
             docker push $GOOGLE_REGISTRY/$CIRCLE_PROJECT_REPONAME:latest
 
+  deploy:
+    docker:
+      - image: google/cloud-sdk
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          name: Config Google Cloud SDK
+          command: |
+            echo $GCLOUD_SERVICE_KEY | gcloud auth activate-service-account --key-file=-
+            gcloud --quiet config set project ${GOOGLE_PROJECT_ID}
+            gcloud --quiet config set compute/zone ${GOOGLE_COMPUTE_ZONE}
+            gcloud --quiet auth configure-docker
+
+      - run:
+          name: Setting Cluster Credentials
+          command: gcloud container clusters get-credentials $GOOGLE_CLUSTER_NAME --region $GOOGLE_COMPUTE_ZONE
+
+      - run:
+          name: Setting Image Version to Deployment
+          command: kubectl set image deployment/$GOOGLE_DEPLOYMENT_NAME ${GOOGLE_DEPLOYMENT_NAME}=${GOOGLE_REGISTRY}/${CIRCLE_PROJECT_REPONAME}:${CIRCLE_TAG}
+
 workflows:
   version: 2
   build:
@@ -61,9 +83,17 @@ workflows:
               only: /.*/
             branches:
               only: /.*/
-      - deploy_tag:
+      - publish_image:
           requires:
             - test
+          filters:
+            tags:
+              only: /release-.*/
+            branches:
+              ignore: /.*/
+      - deploy:
+          requires:
+            - publish_image
           filters:
             tags:
               only: /release-.*/
