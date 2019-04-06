@@ -71,7 +71,7 @@ jobs:
 
       - run:
           name: Setting Image Version to Deployment
-          command: kubectl set image deployment/$GOOGLE_DEPLOYMENT_NAME ${GOOGLE_DEPLOYMENT_NAME}=${GOOGLE_REGISTRY}/${CIRCLE_PROJECT_REPONAME}:${CIRCLE_TAG}
+          command: kubectl set image deployment/$GOOGLE_DEPLOYMENT_NAME ${CIRCLE_PROJECT_REPONAME}-app=${GOOGLE_REGISTRY}/${CIRCLE_PROJECT_REPONAME}:${CIRCLE_TAG}
 
 workflows:
   version: 2
