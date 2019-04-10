@@ -6,6 +6,8 @@ WORKDIR /gobbler
 COPY Gemfile /gobbler/Gemfile
 COPY Gemfile.lock /gobbler/Gemfile.lock
 
+ENV RAILS_ENV $RAILS_ENV
+
 RUN bundle install
 
 COPY . /gobbler
@@ -20,4 +22,4 @@ RUN bundle exec rails webpacker:install
 EXPOSE 3000
 
 # # Start the main process.
-CMD ["rails", "server", "-b", "0.0.0.0"]
+ENTRYPOINT ["rails", "server", "-e", "$RAILS_ENV", "-b", "0.0.0.0"]
