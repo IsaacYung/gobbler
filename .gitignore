@@ -27,7 +27,7 @@
 # Ignore master key for decrypting credentials and more.
 /config/master.key
 
-/manifests/gobbler-env-secret.yml
+/manifests/gobbler-env-secrets.yml
 
 /public/packs
 /public/packs-test
