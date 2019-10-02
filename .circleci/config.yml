@@ -2,110 +2,80 @@ version: 2
 jobs:
   test:
     docker:
-      - image: circleci/ruby:2.4.1
+      - image: circleci/buildpack-deps:stretch
     steps:
       - checkout
       - setup_remote_docker:
           docker_layer_caching: true
-      - run:
-          name: Installing dependencies
-          command: |
-            docker-compose run --rm -e RACK_ENV=test api bundle install
+
       - run:
           name: Building Docker throught docker-compose
           command: docker-compose build
-      - run:
-          name: Creating database and running migrations
-          command: |
-            docker-compose run --rm -e RACK_ENV=test api rake db:setup
-            docker-compose run --rm -e RACK_ENV=test api rake db:migrate
-            docker-compose run --rm -e RACK_ENV=test api rake db:seed
-      - run:
-          name: Running and Storing tests
-          command: |
-            mkdir ~/rspec
-            docker-compose run --name api -e RACK_ENV=test api "rspec -r rspec_junit_formatter --format RspecJunitFormatter -o ./junit.xml"
-            docker cp api:/sorting-hat/junit.xml ~/rspec/junit.xml
-            docker stop $(docker ps -aq)
-          when: always
-      - store_test_results:
-          path: ~/rspec
 
-  deploy_branch:
+      - run:
+          name: Creating Database
+          command: |
+            docker-compose run --rm -e RAILS_ENV=test web rake db:setup
+
+      - run:
+          name: Running tests
+          command: |
+            docker-compose run --rm -e RAILS_ENV=test web rspec
+
+  publish_image:
     docker:
-      - image: circleci/ruby:2.4.1
-    environment:
-      DEPLOY_ENV: integration
+      - image: google/cloud-sdk
     steps:
       - checkout
       - setup_remote_docker:
           docker_layer_caching: true
       - run:
-          name: Installing dependencies
+          name: Config Google Cloud SDK
           command: |
-            sudo apt-get update
-            sudo apt-get install python-dev
-            sudo apt-get install python-pip
-            sudo pip install awscli --upgrade
+            echo $GCLOUD_SERVICE_KEY | gcloud auth activate-service-account --key-file=-
+            gcloud --quiet config set project ${GOOGLE_PROJECT_ID}
+            gcloud --quiet config set compute/zone ${GOOGLE_COMPUTE_ZONE}
+            gcloud --quiet auth configure-docker
+
+      - run:
+          name: Copy NewRelic YAML
+          command: gsutil cp -r gs://kubernets-configuration/newrelic.yml ./config/
+
       - run:
           name: Building Docker image
           command: |
-            $(aws ecr get-login --no-include-email)
-            docker build -t $DOCKER_REGISTRY/$CIRCLE_PROJECT_REPONAME:$CIRCLE_SHA1 .
+            docker build -t $GOOGLE_REGISTRY/$CIRCLE_PROJECT_REPONAME:$CIRCLE_TAG .
+
       - run:
-          name: Pushing Docker Image to AWS
+          name: Publish Gobbler Image in GCR Repository
           command: |
             docker info
-            docker tag $DOCKER_REGISTRY/$CIRCLE_PROJECT_REPONAME:$CIRCLE_SHA1 $DOCKER_REGISTRY/$CIRCLE_PROJECT_REPONAME:latest
-            docker push $DOCKER_REGISTRY/$CIRCLE_PROJECT_REPONAME:$CIRCLE_SHA1
-            docker push $DOCKER_REGISTRY/$CIRCLE_PROJECT_REPONAME:latest
-      - run:
-          name: Image Publication Announcements
-          command: ./.circleci/slack-notificator-publish-image.sh
-      - run:
-          name: Deploy sorting-hat
-          command: ./.circleci/chat-deploy.sh
-      - run:
-          name: Deploy Announcements
-          command: ./.circleci/slack-notificator-deploy.sh
+            docker tag $GOOGLE_REGISTRY/$CIRCLE_PROJECT_REPONAME:$CIRCLE_TAG $GOOGLE_REGISTRY/$CIRCLE_PROJECT_REPONAME:latest
+            docker push $GOOGLE_REGISTRY/$CIRCLE_PROJECT_REPONAME:$CIRCLE_TAG
+            docker push $GOOGLE_REGISTRY/$CIRCLE_PROJECT_REPONAME:latest
 
-  deploy_tag:
+  deploy:
     docker:
-      - image: circleci/ruby:2.4.1
-    environment:
-      DEPLOY_ENV: sandbox
+      - image: google/cloud-sdk
     steps:
       - checkout
       - setup_remote_docker:
           docker_layer_caching: true
       - run:
-          name: Installing dependencies
+          name: Config Google Cloud SDK
           command: |
-            sudo apt-get update
-            sudo apt-get install python-dev
-            sudo apt-get install python-pip
-            sudo pip install awscli --upgrade
+            echo $GCLOUD_SERVICE_KEY | gcloud auth activate-service-account --key-file=-
+            gcloud --quiet config set project ${GOOGLE_PROJECT_ID}
+            gcloud --quiet config set compute/zone ${GOOGLE_COMPUTE_ZONE}
+            gcloud --quiet auth configure-docker
+
       - run:
-          name: Building Docker image
-          command: |
-            $(aws ecr get-login --no-include-email)
-            docker build -t $DOCKER_REGISTRY/$CIRCLE_PROJECT_REPONAME:$CIRCLE_TAG .
+          name: Setting Cluster Credentials
+          command: gcloud container clusters get-credentials $GOOGLE_CLUSTER_NAME --region $GOOGLE_COMPUTE_ZONE
+
       - run:
-          name: Publish sorting-hat Image in AWS ECS Repository
-          command: |
-            docker info
-            docker tag $DOCKER_REGISTRY/$CIRCLE_PROJECT_REPONAME:$CIRCLE_TAG $DOCKER_REGISTRY/$CIRCLE_PROJECT_REPONAME:latest
-            docker push $DOCKER_REGISTRY/$CIRCLE_PROJECT_REPONAME:$CIRCLE_TAG
-            docker push $DOCKER_REGISTRY/$CIRCLE_PROJECT_REPONAME:latest
-      - run:
-          name: Image Publication Announcements
-          command: ./.circleci/slack-notificator-publish-image.sh
-      - run:
-          name: Deploy sorting-hat
-          command: ./.circleci/chat-deploy.sh
-      - run:
-          name: Deploy Announcements
-          command: ./.circleci/slack-notificator-deploy.sh
+          name: Setting Image Version to Deployment
+          command: kubectl set image deployment/$GOOGLE_DEPLOYMENT_NAME ${CIRCLE_PROJECT_REPONAME}-app=${GOOGLE_REGISTRY}/${CIRCLE_PROJECT_REPONAME}:${CIRCLE_TAG}
 
 workflows:
   version: 2
@@ -117,17 +87,17 @@ workflows:
               only: /.*/
             branches:
               only: /.*/
-      - deploy_branch:
+      - publish_image:
           requires:
             - test
           filters:
             tags:
-              ignore: /.*/
+              only: /release-.*/
             branches:
-              only: integration
-      - deploy_tag:
+              ignore: /.*/
+      - deploy:
           requires:
-            - test
+            - publish_image
           filters:
             tags:
               only: /release-.*/

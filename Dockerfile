@@ -19,5 +19,5 @@ RUN bundle exec rails webpacker:install
 
 EXPOSE 3000
 
-# # Start the main process.
-CMD ["rails", "server", "-b", "0.0.0.0"]
+# Start the main process.
+ENTRYPOINT ["rails", "server", "-e", "$RAILS_ENV", "-b", "0.0.0.0"]

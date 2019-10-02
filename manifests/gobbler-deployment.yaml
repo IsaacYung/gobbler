@@ -5,7 +5,7 @@ metadata:
   labels:
     app: gobbler
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: gobbler
@@ -16,7 +16,10 @@ spec:
         tier: web
     spec:
       containers:
-      - name: gobbler-app
-        image: gcr.io/knife-ceramic-236502/gobbler:1.0.0
-        ports:
-        - containerPort: 3000
+        - name: gobbler-app
+          image: gcr.io/knife-ceramic-236502/gobbler:release-1.0.8
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: env-secrets
